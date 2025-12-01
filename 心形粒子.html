@@ -1,0 +1,622 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gesture Particle System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            background-color: #000011;
+            color: #f0f0f0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+        }
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 36px;
+            height: 36px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border-radius: 50%;
+            border: 2px solid #4A5568;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border-radius: 50%;
+            border: 2px solid #4A5568;
+        }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "three": "https://esm.sh/three@0.164.1",
+            "three/addons/": "https://esm.sh/three@0.164.1/addons/",
+            "@mediapipe/tasks-vision": "https://esm.sh/@mediapipe/tasks-vision@0.10.12"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect, useCallback } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+
+        // --- TYPES ---
+        const PATTERNS = ['sphere', 'cube', 'torus', 'dna', 'heart'];
+        
+        // --- ICONS ---
+        const SphereIcon = () => (
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" /></svg>
+        );
+        const CubeIcon = () => (
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3Z" /></svg>
+        );
+        const TorusIcon = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" /></svg>
+        );
+        const DnaIcon = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12.56,4.32C11.24,4.32 10.18,5.5 10.4,6.81L12.5,17.76C12.66,18.76 13.5,19.5 14.5,19.5C15.71,19.5 16.75,18.4 16.5,17.19L14.4,6.24C14.24,5.24 13.4,4.5 12.4,4.5C12.45,4.39 12.5,4.32 12.56,4.32M9.5,4.5C8.5,4.5 7.66,5.24 7.5,6.24L5.4,17.19C5.15,18.4 6.19,19.5 7.4,19.5C8.4,19.5 9.24,18.76 9.4,17.76L11.5,6.81C11.72,5.5 10.66,4.32 9.34,4.32C9.4,4.32 9.45,4.39 9.5,4.5M14.25,9.25L9.75,14.75L9,14L13.5,8.5L14.25,9.25M8.5,9.5L7.75,8.75L12.25,14.25L13,15L8.5,9.5Z" /></svg>
+        );
+        const HeartIcon = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5 2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z" /></svg>
+        );
+        const FullscreenEnterIcon = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M5 14h3v5h2v-7H5v2zm3-9H5v2h5V5H8v3zM14 5v5h5V8h-3V5h-2zm3 9h-5v7h2v-5h3v-2z" /></svg>
+        );
+        const FullscreenExitIcon = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M8 19h3v-5H5v2h3v3zm3-14H8v3H5v2h5V5zm5 14h-3v-3h-2v5h5v-2zm-3-9V5h3v2h-3v3h-2z" /></svg>
+        );
+
+        // --- HOOK for Hand Tracking ---
+        const useHandTracking = (videoRef, onGestureChange) => {
+            const [isLoading, setIsLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const handLandmarkerRef = useRef(null);
+            const animationFrameId = useRef();
+            const lastVideoTime = useRef(-1);
+
+            useEffect(() => {
+                const createHandLandmarker = async () => {
+                    try {
+                        const vision = await FilesetResolver.forVisionTasks(
+                            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
+                        );
+                        const landmarker = await HandLandmarker.createFromOptions(vision, {
+                            baseOptions: {
+                                modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                                delegate: "GPU",
+                            },
+                            runningMode: "VIDEO",
+                            numHands: 2,
+                            minHandDetectionConfidence: 0.5,
+                            minHandPresenceConfidence: 0.5,
+                            minTrackingConfidence: 0.5,
+                        });
+                        handLandmarkerRef.current = landmarker;
+                        setIsLoading(false);
+                        console.log("Hand tracking model loaded successfully");
+                    } catch (e) {
+                        console.error("Hand tracking initialization error:", e);
+                        setError("Failed to initialize hand tracking model. " + (e instanceof Error ? e.message : String(e)));
+                        setIsLoading(false);
+                    }
+                };
+                createHandLandmarker();
+
+                return () => {
+                    if (animationFrameId.current) {
+                        cancelAnimationFrame(animationFrameId.current);
+                    }
+                    handLandmarkerRef.current?.close();
+                };
+            }, []);
+
+            const predictWebcam = useCallback(() => {
+                const landmarker = handLandmarkerRef.current;
+                const video = videoRef.current;
+
+                if (!landmarker || !video || video.readyState < 2) {
+                    animationFrameId.current = requestAnimationFrame(predictWebcam);
+                    return;
+                }
+
+                // 检查视频时间是否更新，避免重复处理同一帧
+                const currentTime = video.currentTime;
+                if (currentTime === lastVideoTime.current) {
+                    animationFrameId.current = requestAnimationFrame(predictWebcam);
+                    return;
+                }
+                lastVideoTime.current = currentTime;
+
+                try {
+                    const startTimeMs = performance.now();
+                    const results = landmarker.detectForVideo(video, startTimeMs);
+
+                    if (results.landmarks && results.landmarks.length > 0) {
+                        const landmarks = results.landmarks[0];
+                        
+                        // 使用更准确的手势识别算法
+                        // 获取关键点：拇指尖(4)、食指尖(8)、中指尖(12)、无名指尖(16)、小指尖(20)
+                        // 以及对应的关节点：拇指关节(3)、食指关节(6)、中指关节(10)、无名指关节(14)、小指关节(18)
+                        const thumbTip = landmarks[4];
+                        const thumbJoint = landmarks[3];
+                        const indexTip = landmarks[8];
+                        const indexJoint = landmarks[6];
+                        const middleTip = landmarks[12];
+                        const middleJoint = landmarks[10];
+                        const ringTip = landmarks[16];
+                        const ringJoint = landmarks[14];
+                        const pinkyTip = landmarks[20];
+                        const pinkyJoint = landmarks[18];
+
+                        // 计算每个手指是否伸展
+                        const isThumbExtended = thumbTip.y < thumbJoint.y;
+                        const isIndexExtended = indexTip.y < indexJoint.y;
+                        const isMiddleExtended = middleTip.y < middleJoint.y;
+                        const isRingExtended = ringTip.y < ringJoint.y;
+                        const isPinkyExtended = pinkyTip.y < pinkyJoint.y;
+
+                        const extendedFingers = [isThumbExtended, isIndexExtended, isMiddleExtended, isRingExtended, isPinkyExtended].filter(Boolean).length;
+
+                        let gesture;
+                        if (extendedFingers >= 4) {
+                            gesture = 'open';
+                        } else if (extendedFingers <= 1) {
+                            gesture = 'closed';
+                        } else {
+                            gesture = 'partial';
+                        }
+
+                        console.log(`Detected gesture: ${gesture}, extended fingers: ${extendedFingers}`);
+                        onGestureChange(gesture);
+                    } else {
+                        onGestureChange('none');
+                    }
+                } catch (e) {
+                    console.error("Hand detection error:", e);
+                }
+
+                animationFrameId.current = requestAnimationFrame(predictWebcam);
+            }, [videoRef, onGestureChange]);
+
+            return { isLoading, error, startDetection: predictWebcam };
+        };
+
+        // --- THREE.JS CANVAS COMPONENT ---
+        const PARTICLE_COUNT = 20000;
+
+        const generateSpherePoints = (count, radius) => {
+            const points = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                const u = Math.random();
+                const v = Math.random();
+                const theta = 2 * Math.PI * u;
+                const phi = Math.acos(2 * v - 1);
+                points[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+                points[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                points[i * 3 + 2] = radius * Math.cos(phi);
+            }
+            return points;
+        };
+
+        const generateCubePoints = (count, size) => {
+            const points = new Float32Array(count * 3);
+            const halfSize = size / 2;
+            for (let i = 0; i < count; i++) {
+                points[i * 3] = THREE.MathUtils.randFloat(-halfSize, halfSize);
+                points[i * 3 + 1] = THREE.MathUtils.randFloat(-halfSize, halfSize);
+                points[i * 3 + 2] = THREE.MathUtils.randFloat(-halfSize, halfSize);
+            }
+            return points;
+        };
+
+        const generateTorusPoints = (count, radius, tube) => {
+            const points = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                const u = Math.random() * Math.PI * 2;
+                const v = Math.random() * Math.PI * 2;
+                points[i * 3] = (radius + tube * Math.cos(v)) * Math.cos(u);
+                points[i * 3 + 1] = (radius + tube * Math.cos(v)) * Math.sin(u);
+                points[i * 3 + 2] = tube * Math.sin(v);
+            }
+            return points;
+        };
+
+        const generateDnaPoints = (count, length, radius) => {
+            const points = new Float32Array(count * 3);
+            const halfLength = length / 2;
+            for (let i = 0; i < count; i++) {
+                const progress = (i / count) * 2 - 1;
+                const y = progress * halfLength;
+                const angle = progress * Math.PI * 5;
+                const offset = i % 2 === 0 ? 0 : Math.PI;
+                points[i * 3] = Math.cos(angle + offset) * radius;
+                points[i * 3 + 1] = y;
+                points[i * 3 + 2] = Math.sin(angle + offset) * radius;
+            }
+            return points;
+        };
+
+        const generateHeartPoints = (count, scale = 1.5) => {
+            const points = new Float32Array(count * 3);
+            let i = 0;
+            while (i < count) {
+                // 在心形的边界框内生成随机点
+                const randX = (Math.random() * 2.6 - 1.3) * scale;
+                const randY = (Math.random() * 3.0 - 1.3) * scale;
+                const randZ = (Math.random() - 0.5) * 0.5 * scale;
+
+                // 使用心形隐式方程检查点是否在心形内部，以确保均匀分布
+                const checkX = randX / (0.7 * scale);
+                const checkY = (randY - 0.2 * scale) / (0.7 * scale); // 调整Y轴使心形居中
+                
+                if (Math.pow(checkX * checkX + checkY * checkY - 1, 3) - checkX * checkX * checkY * checkY * checkY < 0) {
+                    points[i * 3] = randX;
+                    points[i * 3 + 1] = randY;
+                    points[i * 3 + 2] = randZ;
+                    i++;
+                }
+            }
+            return points;
+        };
+
+        const generatePatternPoints = (pattern, count) => {
+            switch (pattern) {
+                case 'sphere': return generateSpherePoints(count, 1.5);
+                case 'cube': return generateCubePoints(count, 2.5);
+                case 'torus': return generateTorusPoints(count, 1.2, 0.5);
+                case 'dna': return generateDnaPoints(count, 4, 0.5);
+                case 'heart': return generateHeartPoints(count, 1.5);
+                default: return new Float32Array(count * 3);
+            }
+        };
+
+        const ThreeCanvas = ({ pattern, color, gesture }) => {
+            const mountRef = useRef(null);
+            const animationRef = useRef(null);
+            const state = useRef({
+                shapePositions: new Float32Array(),
+                dispersedPositions: new Float32Array(),
+                heartPositions: new Float32Array(),
+                currentGesture: 'none',
+            }).current;
+
+            // 更新当前手势状态
+            useEffect(() => {
+                state.currentGesture = gesture;
+                console.log('Gesture updated to:', gesture);
+            }, [gesture, state]);
+
+            useEffect(() => {
+                if (!mountRef.current) return;
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.z = 5;
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                mountRef.current.appendChild(renderer.domElement);
+                
+                mountRef.current.__three_scene = scene;
+
+                const renderPass = new RenderPass(scene, camera);
+                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+                bloomPass.threshold = 0;
+                bloomPass.strength = 1.2;
+                bloomPass.radius = 0.5;
+                const composer = new EffectComposer(renderer);
+                composer.addPass(renderPass);
+                composer.addPass(bloomPass);
+
+                const geometry = new THREE.BufferGeometry();
+                state.shapePositions = generatePatternPoints(pattern, PARTICLE_COUNT);
+                state.dispersedPositions = generateSpherePoints(PARTICLE_COUNT, 4);
+                state.heartPositions = generateHeartPoints(PARTICLE_COUNT, 1.5);
+                
+                const positions = state.shapePositions.slice();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                
+                const material = new THREE.PointsMaterial({
+                    color: new THREE.Color(color),
+                    size: 0.02,
+                    blending: THREE.AdditiveBlending,
+                    transparent: true,
+                    depthWrite: false,
+                    sizeAttenuation: true, // 启用距离衰减，增强立体感
+                });
+                const particles = new THREE.Points(geometry, material);
+                scene.add(particles);
+
+                const clock = new THREE.Clock();
+
+                const animate = () => {
+                    animationRef.current = requestAnimationFrame(animate);
+                    const delta = clock.getDelta();
+
+                    const currentPositions = geometry.attributes.position.array;
+                    
+                    // 根据当前手势决定粒子的目标位置
+                    let targetPositions;
+                    const currentGesture = state.currentGesture;
+                    
+                    if (currentGesture === 'closed') {
+                        // 握拳时形成心形
+                        targetPositions = state.heartPositions;
+                        console.log('Animating to heart shape');
+                    } else if (currentGesture === 'open' || currentGesture === 'partial' || currentGesture === 'none') {
+                        // 张开手或无手势时分散
+                        targetPositions = state.dispersedPositions;
+                        console.log('Animating to dispersed shape');
+                    } else {
+                        // 其他情况保持原形状
+                        targetPositions = state.shapePositions;
+                        console.log('Animating to original shape');
+                    }
+                    
+                    // 平滑过渡到目标位置
+                    for (let i = 0; i < PARTICLE_COUNT * 3; i++) {
+                        currentPositions[i] += (targetPositions[i] - currentPositions[i]) * 0.08;
+                    }
+
+                    const time = clock.getElapsedTime();
+                    
+                    // 统一的轻微动画效果
+                    for (let i = 0; i < PARTICLE_COUNT; i++) {
+                        const i3 = i * 3;
+                        const x = currentPositions[i3];
+                        const y = currentPositions[i3 + 1];
+                        currentPositions[i3] += Math.sin(time * 0.5 + y) * 0.0005;
+                        currentPositions[i3 + 1] += Math.cos(time * 0.3 + x) * 0.0005;
+                        currentPositions[i3 + 2] += Math.sin(time * 0.2 + x) * 0.0005;
+                    }
+
+                    geometry.attributes.position.needsUpdate = true;
+                    
+                    // 根据手势决定是否旋转
+                    if (state.currentGesture === 'closed') {
+                        // 心形状态下不旋转
+                        particles.rotation.y = 0;
+                        particles.rotation.x = 0;
+                    } else {
+                        // 其他状态下恢复旋转效果
+                        particles.rotation.y += delta * 0.05;
+                    }
+
+                    composer.render();
+                };
+                animate();
+
+                const handleResize = () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    composer.setSize(window.innerWidth, window.innerHeight);
+                };
+                window.addEventListener('resize', handleResize);
+
+                return () => {
+                    window.removeEventListener('resize', handleResize);
+                    if (animationRef.current) {
+                        cancelAnimationFrame(animationRef.current);
+                    }
+                    mountRef.current?.removeChild(renderer.domElement);
+                    renderer.dispose();
+                    geometry.dispose();
+                    material.dispose();
+                };
+            }, []);
+
+            useEffect(() => {
+                const scene = mountRef.current?.__three_scene;
+                if (scene) {
+                    const particles = scene.children.find((child) => child instanceof THREE.Points);
+                    if (particles) {
+                        // 心形时为红色，非心形时为蓝色
+                        const targetColor = state.currentGesture === 'closed' ? new THREE.Color('#ff0000') : new THREE.Color('#0000ff');
+                        particles.material.color.lerp(targetColor, 0.1);
+                    }
+                }
+            }, [gesture]);
+
+            useEffect(() => {
+                state.shapePositions = generatePatternPoints(pattern, PARTICLE_COUNT);
+                state.heartPositions = generateHeartPoints(PARTICLE_COUNT, 1.5);
+            }, [pattern, state]);
+
+            return <div ref={mountRef} className="w-full h-full" />;
+        };
+
+        // --- UI COMPONENTS ---
+        const ControlPanel = ({ pattern, onPatternChange, onCameraEnable, isCameraEnabled, isLoading, error }) => {
+            const PATTERN_ICONS = {
+                sphere: <SphereIcon />,
+                cube: <CubeIcon />,
+                torus: <TorusIcon />,
+                dna: <DnaIcon />,
+                heart: <HeartIcon />,
+            };
+
+            return (
+                <div className="absolute top-4 left-4 md:left-auto md:right-4 flex flex-col gap-4">
+                    <div className="glassmorphism p-3 rounded-lg flex flex-col gap-3">
+                        <h2 className="text-sm font-bold text-gray-200 uppercase tracking-wider">Shape</h2>
+                        <div className="flex gap-2">
+                            {PATTERNS.map(p => (
+                                <button
+                                    key={p}
+                                    onClick={() => onPatternChange(p)}
+                                    className={`p-2 rounded-md transition-colors duration-200 ${pattern === p ? 'bg-blue-500 text-white' : 'bg-gray-700/50 hover:bg-gray-600/70 text-gray-300'}`}
+                                    aria-label={`Select ${p} shape`}
+                                    title={p.charAt(0).toUpperCase() + p.slice(1)}
+                                >
+                                    {PATTERN_ICONS[p]}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {!isCameraEnabled && (
+                        <div className="glassmorphism p-3 rounded-lg text-center">
+                            {isLoading ? (
+                                <p className="text-sm animate-pulse">Loading AI Model...</p>
+                            ) : error ? (
+                                <p className="text-sm text-red-400">{error}</p>
+                            ) : (
+                                <button onClick={onCameraEnable} className="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600 transition-colors">
+                                    Enable Camera
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const FullscreenButton = () => {
+            const [isFullscreen, setIsFullscreen] = useState(false);
+
+            const toggleFullscreen = () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                    });
+                } else {
+                    document.exitFullscreen();
+                }
+            };
+
+            useEffect(() => {
+                const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+                document.addEventListener('fullscreenchange', onFullscreenChange);
+                return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+            }, []);
+
+            return (
+                <button
+                    onClick={toggleFullscreen}
+                    className="absolute bottom-4 right-4 glassmorphism p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700/50 transition-all"
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                    title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                    {isFullscreen ? <FullscreenExitIcon /> : <FullscreenEnterIcon />}
+                </button>
+            );
+        };
+
+        // --- MAIN APP COMPONENT ---
+        function App() {
+            const [pattern, setPattern] = useState('sphere');
+            const [gesture, setGesture] = useState('none');
+            const [isCameraEnabled, setIsCameraEnabled] = useState(false);
+            const [cameraError, setCameraError] = useState(null);
+            
+            const videoRef = useRef(null);
+            const { isLoading, error, startDetection } = useHandTracking(videoRef, setGesture);
+
+            const handleEnableCamera = async () => {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.addEventListener('loadeddata', () => {
+                                setIsCameraEnabled(true);
+                                startDetection();
+                            });
+                        }
+                    } catch (err) {
+                        setCameraError('Error accessing camera. Please grant permission.');
+                        console.error("getUserMedia error:", err);
+                    }
+                }
+            };
+
+            // 自动获取摄像头权限
+            useEffect(() => {
+                // 等待手势识别模型加载完成后自动启用摄像头
+                if (!isLoading && !error && !isCameraEnabled && !cameraError) {
+                    handleEnableCamera();
+                }
+            }, [isLoading, error, isCameraEnabled, cameraError]);
+
+            return (
+                <main className="relative w-screen h-screen bg-black">
+                    <ThreeCanvas pattern={pattern} gesture={gesture} />
+                    <video ref={videoRef} autoPlay playsInline muted className="absolute w-32 h-24 bottom-4 left-4 rounded-md opacity-50"></video>
+                    
+                    <ControlPanel
+                        pattern={pattern}
+                        onPatternChange={setPattern}
+                        onCameraEnable={handleEnableCamera}
+                        isCameraEnabled={isCameraEnabled}
+                        isLoading={isLoading}
+                        error={error || cameraError}
+                    />
+                    <FullscreenButton />
+
+                    {!isCameraEnabled && !isLoading && !error && !cameraError && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                            <div className="text-center p-8 max-w-sm">
+                                <h1 className="text-3xl font-bold mb-2">Gesture Particles</h1>
+                                <p className="text-gray-300 mb-6">Control a universe of particles with your hand. Camera will be enabled automatically.</p>
+                                <div className="text-sm text-gray-400 mt-4">
+                                    <p>✊ Fist = Heart Shape</p>
+                                    <p>✋ Open Hand = Scattered</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 手势状态显示和调试信息 */}
+                    {isCameraEnabled && (
+                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 glassmorphism px-4 py-2 rounded-lg">
+                            <p className="text-sm text-gray-200">
+                                Current Gesture: <span className="font-bold text-blue-400">{gesture}</span>
+                                {gesture === 'closed' && <span className="ml-2 text-red-400">❤️ Heart Mode</span>}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                Try making a fist to see the heart shape!
+                            </p>
+                        </div>
+                    )}
+                </main>
+            );
+        }
+
+        // --- RENDER APP ---
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+          const root = ReactDOM.createRoot(rootElement);
+          root.render(
+            <React.StrictMode>
+              <App />
+            </React.StrictMode>
+          );
+        }
+    </script>
+</body>
+</html>
