@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,8 +64,8 @@
         import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
         // --- TYPES ---
-        const PATTERNS = ['heart', 'cat'];
-        
+        const PATTERNS = ['sphere', 'cube', 'torus', 'dna', 'heart'];
+
         // --- ICONS ---
         const SphereIcon = () => (
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" /></svg>
@@ -82,9 +81,6 @@
         );
         const HeartIcon = () => (
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5 2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z" /></svg>
-        );
-        const CatIcon = () => (
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12,8L10.67,8.09C9.81,7.07 7.4,4.5 5,4.5C5,4.5 3.03,7.46 4.96,11.41C4.41,12.24 4.07,12.67 4,13.66L4.07,13.95L15.93,13.95L16,13.66C15.93,12.67 15.59,12.24 15.04,11.41C16.97,7.46 15,4.5 15,4.5C12.6,4.5 10.19,7.07 9.33,8.09L12,8M9,11A1,1 0 0,1 10,12A1,1 0 0,1 9,13A1,1 0 0,1 8,12A1,1 0 0,1 9,11M15,11A1,1 0 0,1 16,12A1,1 0 0,1 15,13A1,1 0 0,1 14,12A1,1 0 0,1 15,11M11,14H13L12.5,15.5H11.5L11,14Z" /></svg>
         );
         const FullscreenEnterIcon = () => (
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M5 14h3v5h2v-7H5v2zm3-9H5v2h5V5H8v3zM14 5v5h5V8h-3V5h-2zm3 9h-5v7h2v-5h3v-2z" /></svg>
@@ -160,7 +156,7 @@
 
                     if (results.landmarks && results.landmarks.length > 0) {
                         const landmarks = results.landmarks[0];
-                        
+
                         // 使用更准确的手势识别算法
                         // 获取关键点：拇指尖(4)、食指尖(8)、中指尖(12)、无名指尖(16)、小指尖(20)
                         // 以及对应的关节点：拇指关节(3)、食指关节(6)、中指关节(10)、无名指关节(14)、小指关节(18)
@@ -275,7 +271,7 @@
                 // 使用心形隐式方程检查点是否在心形内部，以确保均匀分布
                 const checkX = randX / (0.7 * scale);
                 const checkY = (randY - 0.2 * scale) / (0.7 * scale); // 调整Y轴使心形居中
-                
+
                 if (Math.pow(checkX * checkX + checkY * checkY - 1, 3) - checkX * checkX * checkY * checkY * checkY < 0) {
                     points[i * 3] = randX;
                     points[i * 3 + 1] = randY;
@@ -286,59 +282,25 @@
             return points;
         };
 
-        const generateCatPoints = (count, scale = 1.5) => {
-            const points = new Float32Array(count * 3);
-            let i = 0;
-            
-            while (i < count) {
-                // 猫头轮廓的参数方程
-                const t = Math.random() * Math.PI * 2;
-                const r = Math.random();
-                
-                // 基本圆形头部
-                let x = Math.cos(t) * r * scale;
-                let y = Math.sin(t) * r * scale;
-                
-                // 添加猫耳朵
-                if (t > Math.PI * 0.2 && t < Math.PI * 0.4) {
-                    // 左耳
-                    x += Math.cos(t) * 0.5 * scale;
-                    y += Math.sin(t) * 0.8 * scale;
-                } else if (t > Math.PI * 0.6 && t < Math.PI * 0.8) {
-                    // 右耳
-                    x += Math.cos(t) * 0.5 * scale;
-                    y += Math.sin(t) * 0.8 * scale;
-                }
-                
-                const z = (Math.random() - 0.5) * 0.5 * scale;
-                
-                points[i * 3] = x;
-                points[i * 3 + 1] = y;
-                points[i * 3 + 2] = z;
-                i++;
-            }
-            
-            return points;
-        };
-
         const generatePatternPoints = (pattern, count) => {
             switch (pattern) {
+                case 'sphere': return generateSpherePoints(count, 1.5);
+                case 'cube': return generateCubePoints(count, 2.5);
+                case 'torus': return generateTorusPoints(count, 1.2, 0.5);
+                case 'dna': return generateDnaPoints(count, 4, 0.5);
                 case 'heart': return generateHeartPoints(count, 1.5);
-                case 'cat': return generateCatPoints(count, 1.5);
-                default: return generateHeartPoints(count, 1.5);
+                default: return new Float32Array(count * 3);
             }
         };
 
-        const ThreeCanvas = ({ pattern, gesture }) => {
+        const ThreeCanvas = ({ pattern, color, gesture }) => {
             const mountRef = useRef(null);
             const animationRef = useRef(null);
             const state = useRef({
                 shapePositions: new Float32Array(),
                 dispersedPositions: new Float32Array(),
                 heartPositions: new Float32Array(),
-                catPositions: new Float32Array(),
                 currentGesture: 'none',
-                currentPattern: 'heart',
             }).current;
 
             // 更新当前手势状态
@@ -346,12 +308,6 @@
                 state.currentGesture = gesture;
                 console.log('Gesture updated to:', gesture);
             }, [gesture, state]);
-
-            // 更新当前形状状态
-            useEffect(() => {
-                state.currentPattern = pattern;
-                console.log('Pattern updated to:', pattern);
-            }, [pattern, state]);
 
             useEffect(() => {
                 if (!mountRef.current) return;
@@ -364,7 +320,7 @@
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 mountRef.current.appendChild(renderer.domElement);
-                
+
                 mountRef.current.__three_scene = scene;
 
                 const renderPass = new RenderPass(scene, camera);
@@ -380,11 +336,10 @@
                 state.shapePositions = generatePatternPoints(pattern, PARTICLE_COUNT);
                 state.dispersedPositions = generateSpherePoints(PARTICLE_COUNT, 4);
                 state.heartPositions = generateHeartPoints(PARTICLE_COUNT, 1.5);
-                state.catPositions = generateCatPoints(PARTICLE_COUNT, 1.5);
-                
+
                 const positions = state.shapePositions.slice();
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                
+
                 const material = new THREE.PointsMaterial({
                     color: new THREE.Color(color),
                     size: 0.02,
@@ -403,22 +358,15 @@
                     const delta = clock.getDelta();
 
                     const currentPositions = geometry.attributes.position.array;
-                    
+
                     // 根据当前手势决定粒子的目标位置
                     let targetPositions;
                     const currentGesture = state.currentGesture;
-                    
+
                     if (currentGesture === 'closed') {
-                        // 握拳时根据当前选择的形状决定目标位置
-                        if (state.currentPattern === 'heart') {
-                            targetPositions = state.heartPositions;
-                            console.log('Animating to heart shape');
-                        } else if (state.currentPattern === 'cat') {
-                            targetPositions = state.catPositions;
-                            console.log('Animating to cat shape');
-                        } else {
-                            targetPositions = state.heartPositions; // 默认心形
-                        }
+                        // 握拳时形成心形
+                        targetPositions = state.heartPositions;
+                        console.log('Animating to heart shape');
                     } else if (currentGesture === 'open' || currentGesture === 'partial' || currentGesture === 'none') {
                         // 张开手或无手势时分散
                         targetPositions = state.dispersedPositions;
@@ -428,14 +376,14 @@
                         targetPositions = state.shapePositions;
                         console.log('Animating to original shape');
                     }
-                    
+
                     // 平滑过渡到目标位置
                     for (let i = 0; i < PARTICLE_COUNT * 3; i++) {
                         currentPositions[i] += (targetPositions[i] - currentPositions[i]) * 0.08;
                     }
 
                     const time = clock.getElapsedTime();
-                    
+
                     // 统一的轻微动画效果
                     for (let i = 0; i < PARTICLE_COUNT; i++) {
                         const i3 = i * 3;
@@ -447,7 +395,7 @@
                     }
 
                     geometry.attributes.position.needsUpdate = true;
-                    
+
                     // 根据手势决定是否旋转
                     if (state.currentGesture === 'closed') {
                         // 心形状态下不旋转
@@ -487,28 +435,16 @@
                 if (scene) {
                     const particles = scene.children.find((child) => child instanceof THREE.Points);
                     if (particles) {
-                        // 握拳时根据形状决定颜色：心形为红色，猫形为橙色；非握拳时为蓝色
-                        let targetColor;
-                        if (state.currentGesture === 'closed') {
-                            if (state.currentPattern === 'heart') {
-                                targetColor = new THREE.Color('#ff0000'); // 红色
-                            } else if (state.currentPattern === 'cat') {
-                                targetColor = new THREE.Color('#ff8800'); // 橙色
-                            } else {
-                                targetColor = new THREE.Color('#ff0000'); // 默认红色
-                            }
-                        } else {
-                            targetColor = new THREE.Color('#0000ff'); // 蓝色
-                        }
+                        // 心形时为红色，非心形时为蓝色
+                        const targetColor = state.currentGesture === 'closed' ? new THREE.Color('#ff0000') : new THREE.Color('#0000ff');
                         particles.material.color.lerp(targetColor, 0.1);
                     }
                 }
-            }, [gesture, pattern]);
+            }, [gesture]);
 
             useEffect(() => {
                 state.shapePositions = generatePatternPoints(pattern, PARTICLE_COUNT);
                 state.heartPositions = generateHeartPoints(PARTICLE_COUNT, 1.5);
-                state.catPositions = generateCatPoints(PARTICLE_COUNT, 1.5);
             }, [pattern, state]);
 
             return <div ref={mountRef} className="w-full h-full" />;
@@ -517,8 +453,11 @@
         // --- UI COMPONENTS ---
         const ControlPanel = ({ pattern, onPatternChange, onCameraEnable, isCameraEnabled, isLoading, error }) => {
             const PATTERN_ICONS = {
+                sphere: <SphereIcon />,
+                cube: <CubeIcon />,
+                torus: <TorusIcon />,
+                dna: <DnaIcon />,
                 heart: <HeartIcon />,
-                cat: <CatIcon />,
             };
 
             return (
@@ -589,11 +528,11 @@
 
         // --- MAIN APP COMPONENT ---
         function App() {
-            const [pattern, setPattern] = useState('heart');
+            const [pattern, setPattern] = useState('sphere');
             const [gesture, setGesture] = useState('none');
             const [isCameraEnabled, setIsCameraEnabled] = useState(false);
             const [cameraError, setCameraError] = useState(null);
-            
+
             const videoRef = useRef(null);
             const { isLoading, error, startDetection } = useHandTracking(videoRef, setGesture);
 
@@ -627,7 +566,7 @@
                 <main className="relative w-screen h-screen bg-black">
                     <ThreeCanvas pattern={pattern} gesture={gesture} />
                     <video ref={videoRef} autoPlay playsInline muted className="absolute w-32 h-24 bottom-4 left-4 rounded-md opacity-50"></video>
-                    
+
                     <ControlPanel
                         pattern={pattern}
                         onPatternChange={setPattern}
